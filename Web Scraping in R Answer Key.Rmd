@@ -1,0 +1,274 @@
+---
+title: "Web Scraping in R (Answer Key)"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Preamble
+
+```{r}
+rm(list=ls())
+library(tidyverse)
+library(rvest) # run 'install.packages("rvest")' if it is not available on your local computer
+```
+
+# Basics of Web Scraping
+
+## Example HTML code
+
+First, we'll learn how to find specific information on a webpage using the example HTML code from the slides. The minimal_html() function will help us write html code and convert it to an xml_document object. In actual web scraping exercises, you don't need this step.
+
+```{r}
+html <- minimal_html("
+<html>
+<head>
+  <title>Green Eggs and Ham by Doctor Seuss</title>
+</head>
+<body>
+  <h1 id='one'>Part One</h1>
+  <p>I do not like green eggs and ham.</p>
+  <h1 id='two'>Part Two</h1>
+  <p class='important'>I do not like them in a <b>house</b>.</p>
+  <p class='important'>I do not like them with a <b>mouse</b>.</p>
+  <p class='important'>I do not like them here or there.</p>
+  <p>I do not like them anywhere.</p>
+  <img src='myimg.png' width='100' height='100'>
+</body>
+")
+html
+```
+
+## Element extraction
+
+html_elements() is a function that returns a list of all the elements that match your criteria.
+
+```{r}
+# Paragraph elements
+print("Paragraph elements:")
+print( html %>% html_elements("p") )
+print("")
+
+# To get elements that are in the important class... use "."
+print("Elements that have an attribute 'class = 'important'':")
+print( html %>% html_elements(".important") )
+print("")
+
+# Heading elements
+print("Heading elements:")
+print( html %>% html_elements("h1") )
+print("")
+
+# To get elements that have an id = second... use "#"
+print("Elements that have an attribute 'id = 'two'':")
+print( html %>% html_elements("#two") )
+print("")
+```
+
+html_element() is a function that takes in a list of html code. For each item in that list, it will search for the element you're looking for. It returns a list with the searched-for element from each item in the original list.
+
+The easiest way to think about these functions is that html_elements() will help you narrow down the html code to the stuff that you want, and html_element() will help you turn that narrowed-down-stuff into useable data.
+
+```{r}
+# First, use html_elements() to get the important paragraphs.
+important_paragraphs <- html %>% html_elements(".important")
+
+# Then, use html_element() to get the bolded word from the important paragraphs.
+print( important_paragraphs %>% html_element("b") )
+```
+
+If a searched-for element doesnt exist, html_element() will return NA, whereas html_elements() will simply skip. This is A REALLY IMPORTANT FEATURE to keep in mind during web scraping, because you want to be able to say some data is actually missing (NA)!
+
+```{r}
+# If you try to get the bolded words from the important paragraphs using html_elements()...
+print("Output from html_elements()")
+print( important_paragraphs %>% html_elements("b") )
+print("")
+# ...it ends up creating a list of 2 of the bolded words, even though there were three important sentences.
+
+# If you try to get the bolded words from the important paragraphs using html_element()...
+print("Output from html_element()")
+print( important_paragraphs %>% html_element("b") )
+# ...it ends up creating a list of 3, two of which are the bolded words, and the third entry indicates that there is no bolded word in the third sentence.
+```
+
+## Text extraction
+
+So far, we've extracted some elements. But what if we just want the plain text contents inside? We can use html_text2().
+
+```{r}
+# Get the plain text from the important paragraphs.
+important_paragraphs %>% html_text2()
+
+# Just get the key noun from the important paragraphs.
+important_paragraphs %>% html_element("b") %>% html_text2()
+```
+
+
+## Table extraction
+
+The dream is to already have data stored in an HTML table. Here's some example html table data.
+
+```{r}
+html <- minimal_html("
+  <h1> A Heading for my Table</h1>
+  <table class='mytable'>
+    <tr><th>Number of People</th>   <th>Expected Number of Hands</th></tr>
+    <tr><td>1</td> <td>2</td></tr>
+    <tr><td>2</td> <td>4</td></tr>
+    <tr><td>3</td> <td>6</td></tr>
+    <tr><td>4</td> <td></td></tr>
+  </table>
+  ")
+```
+
+Let's extract the table using html_table().
+
+```{r}
+extracted_table <- html %>% html_element("table") %>% html_table()
+extracted_table
+```
+
+Notice that the expected number of hands was missing when number of people was 4. This is coded as NA by html_table().
+
+
+# Real Practice: Star Wars
+
+For practice, let's use the example webpage hosted by rvest with a list of all the Star Wars films and some information about them.
+
+The read_html() function will take a URL (string) as an input. It will output the html code as an xml_document object (which we'll call "html"). The rvest library works well with xml_document objects.
+
+```{r}
+url <- "https://rvest.tidyverse.org/articles/starwars.html"
+html <- read_html(url)
+print(html)
+```
+
+Now you have an xml_document object like before, except this one comes from a real website. Use this to work through the rest of the exercises.
+
+## Exercise 1. What are the movies listed on this website? Please generate a list of the plain text names of the movies.
+
+Hint: The titles are contained in "h2" elements... and these "h2" elements are inside "section" elements.
+
+```{r}
+titles <- html %>% html_elements("section") %>% html_element("h2") %>% html_text2()
+titles
+```
+
+## Exercise 2. Get the list of directors.
+
+Hint: This has something to do with the "class" attribute.
+
+```{r}
+directors <- html %>% html_elements(".director") %>% html_text2()
+directors
+```
+
+## Exercise 3. Get a list of release dates.
+
+Hint: Release dates are in "p" elements... which are inside "section" elements.
+
+```{r}
+release_dates <- html %>% 
+  html_elements("section") %>% 
+  html_element("p") %>%
+  html_text2()
+release_dates
+```
+
+## Exercise 4. Put it all together into one tibble.
+
+```{r}
+movies <- tibble(
+  title = titles,
+  director = directors,
+  date = release_dates
+)
+movies
+```
+
+# Real Practice: Movies
+
+Here's the website I'd like you to scrape from.
+
+```{r}
+url <- "https://www.boxofficemojo.com/chart/top_lifetime_gross/?ref_=bo_cso_ac"
+html <- read_html(url)
+```
+
+## Exercise 5. Make a tibble with the top 200 highest grossing movies. It should have 4 variables: Rank, Title, Lifetime Gross, and Year.
+
+```{r}
+top_movies <- html %>%
+  html_elements("table") %>%
+  html_table()
+
+top_movies <- top_movies[[1]] # The output from html_table() stores as a list. If you want to access the data, you'll need to pull the first entry from that list.
+top_movies
+```
+
+## Exercise 6. Looping over pages.
+
+Here is a link to a page with Top Single Day Grosses By Day Of The Week: https://www.boxofficemojo.com/chart/release_top_daily_gross_by_dow/?by_occasion=friday&ref_=bo_csd_ac
+
+Notice that it has a day of the week in the url. This makes it easy to access other similar pages. The link above is the Top Single Day Grossing movies for Fridays. With web scraping and coding, you can use for loops to access similar pages.
+
+Below, I've included code to loop through each day of the week. The for loop will iterate through each day of the week and grab the html code from the website associated with that day of the week.
+
+You are responsible for parsing through that html code and retrieving the table on that page. Put that data into a tibble called top_movies. In addition to that, please add a variable to the tibble called "day" for the day of the week.
+
+After, I've included some code to combine all of this into one tibble.
+
+```{r}
+top_movies_by_day <- tibble()
+
+dow = c("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+for (day in dow) {
+ 
+  print(day)
+  
+  url <- paste0(
+    "https://www.boxofficemojo.com/chart/release_top_daily_gross_by_dow/?by_occasion=", day, "&ref_=bo_csd_ac"
+  )
+  html <- read_html(url)
+  
+  top_movies <- html %>%
+    html_elements("table") %>%
+    html_table()
+  top_movies <- top_movies[[1]]
+  top_movies$day <- day
+  
+  top_movies_by_day <- bind_rows(top_movies_by_day, top_movies %>% slice(1))
+}
+
+top_movies_by_day
+```
+
+## Exercise 7. Visualize.
+
+Let's see how much the top movies grossed by day of the week. Adjust the code below to match how your data looks, then run it to generate a graph!
+
+For most people, you just need to run the code below.
+
+```{r}
+pdata <- top_movies_by_day
+
+# Convert "Gross" variable into a numeric variable.
+pdata$Gross <- as.numeric(gsub("[\\$,]", "", pdata$Gross))
+
+# Make our days of the week variable look nice. Also, turn it into a factor variable.
+pdata$day <- factor(
+  pdata$day,
+  levels = c("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"),
+  labels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+)
+
+# Plot
+ggplot(data=pdata, aes(x=day, y=Gross)) +
+  geom_point(size=4) +
+  scale_y_continuous(labels = scales::comma) +
+  theme_bw() +
+  coord_cartesian(ylim=c(0,NA)) +
+  labs(y = "Total Gross (US$)", x = "Day of the Week")
+```
+
